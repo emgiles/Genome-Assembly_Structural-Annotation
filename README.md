@@ -65,7 +65,7 @@ using mollusca db
 ##### Genome polishing with Polypolish
 Index genome with bwa-mem2
 
-```conda activate bwa-mem2``
+```conda activate bwa-mem2```
 
 ```bwa-mem2 index -p species_assembly1 my_genome_assembly.fasta```
 
@@ -130,35 +130,56 @@ Count nucleotides changed in exons
 ##### Scaffold with RAGTAG. Decide whether or not reference based scaffolding is a good idea for your research aim. Note, introduces structural bias, might be better off not scaffolding if you don't have independent proximity data, such as HiC.
 
 ```conda activate ragtag_blobtools_bwa```
+
 ```nohup ragtag.py scaffold /{PWD}/reference_genome.fasta /{PWD}/new_assembly.contigs_purged_purged.fa &```
+
 using closely related species as a reference
 
 ###### Checking purged scaffolded assembly with QUAST
+
 ```conda activate quast_purgedups_minimap```
+
 ```nohup quast -r /{PWD}/Sscurra_genome.fasta -e --large -k -f -b /{PWD}/new_assembly.contigs_purged_purged.ragtag.scaffold.fasta &```
 
 ###### Checking purged scaffolded assembly with BUSCO
+
 ```conda activate busco```
+
 ```nohup busco -o VG2_busco_mollusca -i /{PWD}/new_assembly.contigs_purged_purged.ragtag.scaffold.fasta -l mollusca_odb10 -m genome &``` 
+
 ```nohup busco -o VG2_busco_metazoa -i /{PWD}/new_assembly.contigs_purged_purged.ragtag.scaffold.fasta -l metazoa_odb10 -m genome &```
 
 ### TRANSCRIPTOME AND PROTEIN LIST RECOVERY
 ##### Upload transcriptomes and check with busco
+
 ```conda activate busco```
+
 ```nohup busco -o species_trinity_metazoa -i /{PWD}/Ensamble_transcriptoma_SViridula.fasta -l metazoa_odb10 -m transcriptome &```
+
 Should have high busco completeness. Duplications can be moderately high.
+
 ##### Check quality of raw reads
+
 ```conda activate fastqc```
+
 ```Fastqc 30j_1.fq.gz```
+
 If the raw reads are of low quality be cautious about using transcriptome.
+
 ##### Align transcriptome to genome
 HiSat and BWA-MEM are not recommended for alignments of transciptomes to genomes. Transcriptomes have multiple transcripts for the same genomic region. These types of alignments are best done with GMAP which can be installed via conda. 
 Example command:
+
 ```gmap_build -d dbname  -D dbloc dbfasta```
+
 GMAP recomends creating objects for -d and -D and dbfasta. This did not work so I ran with full paths.
+
 ###### Build GMAP database
+
 ```conda activate gmap```
+
 ```gmap_build -d viridula_masked -D /{PWD}/VG2_canu_purged_purged_ragtag.scaffold.fasta.masked.nosemicolon  File was written to /{PWD}/viridula_masked.fasta```
+
 ###### Align transcripts with output to .sam
 ```gmap -D /{PWD}/gmap/ -d viridula_masked -B 5 -t 10 --input-buffer-size=1000000 --output-buffer-size=1000000 -f samse /{PWD}/Ensamble_s_viridula_31_y_143.fasta > viridula_masked.nosemicolon.transcriptome2.sam```
 ###### Use samtools (installed in another conda env) to convert from .sam to .bam
