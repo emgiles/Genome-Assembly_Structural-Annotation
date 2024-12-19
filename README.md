@@ -6,96 +6,129 @@ Unzip fastq.gz subread files
 ### GENOME ASSEMBLY
 I have used Canu and wtdbg2. Both take several hours to run assembly with PacBio data and using 16 cores (genome size approx 500M).
 Run assembly using fastq files using Canu
+
 ```canu  -p project_prefix -d project_directory genomeSize=500m -pacbio pacbio_file.fastq```
+
 .contigs.fasta is final filtered assembly results for diploid genomes
 .unitigs.fasta is file that includes all alternative paths
 .unassembled.fasta is a file of contigs with poor support
 .report gives statistics of the raw data and final assembly including N50s and length
 
 Run assembly using wtdbg2
+
 ```nohup ./wtdbg2 -x sq -g 500m -t 16 -i ../folder/pacbio.fastq.gz -fo output_name```
 
 Assembly with finish creating a .ctg.lay.gz file that is approx 1-20G. Then use next step:
+
 ```nohup ./wtpoa-cns -t 16 -i output_name.ctg.lay.gz -fo output_file_name.ctg.fa &```
 
 ###### Check assembly with QUAST
+
 ```conda activate quast_purgedups_minimap```
+
 ```nohup quast -r /{PWD}/reference_genome.fasta -s -e --large -k -f -b new_assembly.contigs.fasta & ```
+
 Compare results to reference assembly
 Output is report.pdf
 
 ###### Check assembly with BUSCO
 This example uses the mollusca database from ncbi. Also try with metazoa db.
+
 ```conda activate busco```
+
 ```nohup busco -o VG2_busco_mollusca -i /{PWD}/new_assembly.contigs.fasta -l mollusca_odb10 -m genome & ```
 
 ### GENOME ASSEMBLY POST-PROCESSING
 ##### Remove duplications with purge_dups
 See [PIPELINE INSTRUCTIONS in github](https://github.com/dfguan/purge_dups). 
 Note, this software is difficult to install and run due to minimal documentation online.
+
 ```conda activate quast_purgedups_minimap```
 
 ##### Check purged assembly with QUAST
+
 ```conda activate quast_purgedups_minimap```
+
 ```/home/pablo/anaconda2/envs/emily/bin/quast -r /{PWD}/reference_genome.fasta -s -e --large -k new_assembly.contigs_purged_purged.fa```
+
 compare to reference
 output is report.pdf
 
 ##### Check purged assembly with BUSCO
+
 ```conda activate busco```
+
 ```nohup busco -o VG2_busco_mollusca -i /{PWD}/new_assembly.contigs_purged_purged.fa -l mollusca_odb10 -m genome &```
+
 using mollusca db
 
 ##### Genome polishing with Polypolish
 Index genome with bwa-mem2
 
 ```conda activate bwa-mem2``
+
 ```bwa-mem2 index -p species_assembly1 my_genome_assembly.fasta```
 
 Align paired end short reads to genome individually. Here the -a parameter is very important. This retains all alignments.
+
 ```bwa-mem2 mem -t 30 -a species_assembly1 my-short-reads_1.fastq > alignment_to_genome_1.sam```
+
 ```bwa-mem2 mem -t 30 -a species_assembly1 my-short-reads_2.fastq > alignment_to_genome_2.sam```
 
 Polish genome using alignments
+
 ```path/to/polypolish polish my_genome_assembly.fasta alignment_to_genome_1.sam alignment_to_genome_2.sam --debug polishing_summary_results.tsv --careful > my_genome_assembly_polished.fasta```
+
 Now you can stop here and move on to scaffolding if all you want is to polish.
 
 If you want to know the results of how well the polishing did...
 Determine amount of bases to change in the genome assembly
+
 ```awk -F'\t' '{print $8}' polishing_summary_results.tsv | sort | uniq -c```
 
 Let's take a look at just the changed bases. Parse results
+
 ```awk -F'\t' '$8 == "changed"' polishing_summary_results.tsv > polished-changed.tsv```
 
 Create a bed file from your parsed polished results
+
 ```awk -F'\t' '{print $1, $2, $2}' OFS='\t' polished-changed.tsv > polished-changed.bed```
 
 Retain first two columns of assembly index file
+
 ```cut -f1,2 my_genome_assembly.fasta.fai > my_genome_assembly.fasta_first2cols.fai```
 
 If you already have an annotation file for your assembly (ie you have proceeded through all of the subsequent steps in this repository)
 Sort the annotation file based on the genome index
+
 ```sortBed -i my_annotation_v1.gff3 -faidx my_genome_assembly.fasta.fai > my_annotation_v1_sorted.gff3```
 
 Create an intergenic bed file
+
 ```complementBed -i my_annotation_v1_sorted.gff3 -g my_genome_assembly.fasta_first2cols.fai > my_annotation_v1_sorted_intergenic.bed```
 
 Sort the polishing results bed file just like the gff was sorted
+
 ```bedtools sort -i polished-changed.bed -faidx my_genome_assembly.fasta_first2cols.fai > polished-changed-sorted.bed```
 
 Determine which nucleotides changed by polishing are in genic vs intergenic regions
+
 ```bedtools intersect -a polished-changed-sorted.bed -b my_annotation_v1_sorted.gff3 my_annotation_v1_sorted_intergenic.bed -wao -f 0.9 -names genic intergenic > polished-changed_intergenic_genic.txt```
 
 Retain only the gene regions
+
 ```awk '$4 == "genic"' polished-changed_intergenic_genic.txt > polished-changed_genic.txt```
 
 Count nucleotides changed in genes
+
 ```awk '$7 == "gene" {count++} END {print count}' polished-changed_genic.txt```
 
 Count nucleotides changed in exons
+
 ```awk '$7 == "exon" {count++} END {print count}' polished-changed_genic.txt```
 
 ##### Scaffold with RAGTAG. Decide whether or not reference based scaffolding is a good idea for your research aim. Note, introduces structural bias, might be better off not scaffolding if you don't have independent proximity data, such as HiC.
+
 ```conda activate ragtag_blobtools_bwa```
 ```nohup ragtag.py scaffold /{PWD}/reference_genome.fasta /{PWD}/new_assembly.contigs_purged_purged.fa &```
 using closely related species as a reference
